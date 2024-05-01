@@ -1,17 +1,3 @@
-# Copyright 2022 ICube Laboratory, University of Strasbourg
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument, RegisterEventHandler
 from launch.conditions import IfCondition, UnlessCondition
@@ -244,68 +230,10 @@ def generate_launch_description():
         'robot_description_semantic': robot_description_semantic_content
     }
 
-    # Running with Moveit2 planning
-    iiwa_planning_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            FindPackageShare('iiwa_bringup'),
-            '/launch',
-            '/iiwa_planning.launch.py'
-        ]),
-        launch_arguments={
-            'description_package': description_package,
-            'description_file': description_file,
-            'prefix': prefix,
-            'start_rviz': start_rviz,
-            'base_frame_file': base_frame_file,
-            'namespace': namespace,
-            'use_sim': use_sim,
-        }.items(),
-        condition=IfCondition(use_planning),
-    )
-
-    # Running with Moveit2 servoing
-    iiwa_servoing_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            FindPackageShare('iiwa_bringup'),
-            '/launch',
-            '/iiwa_servoing.launch.py'
-        ]),
-        launch_arguments={
-            'description_package': description_package,
-            'description_file': description_file,
-            'prefix': prefix,
-            'base_frame_file': base_frame_file,
-            'namespace': namespace,
-        }.items(),
-        condition=IfCondition(use_servoing),
-    )
-
-    robot_controllers = PathJoinSubstitution(
-        [
-            FindPackageShare(runtime_config_package),
-            'config',
-            controllers_file,
-        ]
-    )
     rviz_config_file = PathJoinSubstitution(
         [FindPackageShare(description_package), 'rviz', 'iiwa.rviz']
     )
 
-    control_node = Node(
-        package='controller_manager',
-        executable='ros2_control_node',
-        parameters=[robot_description, robot_controllers],
-        output='both',
-        namespace=namespace,
-        condition=UnlessCondition(use_sim),
-    )
-    robot_state_pub_node = Node(
-        package='robot_state_publisher',
-        executable='robot_state_publisher',
-        namespace=namespace,
-        output='both',
-        parameters=[robot_description],
-    )
     rviz_node = Node(
         package='rviz2',
         executable='rviz2',
@@ -318,98 +246,7 @@ def generate_launch_description():
         ],
         condition=UnlessCondition(use_planning),
     )
-    iiwa_simulation_world = PathJoinSubstitution(
-        [FindPackageShare(description_package),
-            'gazebo/worlds', 'empty.world']
-    )
 
-    gazebo = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            [PathJoinSubstitution(
-                [FindPackageShare('gazebo_ros'),
-                    'launch', 'gazebo.launch.py']
-            )]
-        ),
-        launch_arguments={'verbose': 'false', 'world': iiwa_simulation_world}.items(),
-        condition=IfCondition(use_sim),
-    )
-
-    spawn_entity = Node(
-        package='gazebo_ros',
-        executable='spawn_entity.py',
-        arguments=['-topic', [namespace, 'robot_description'], '-entity', [namespace, 'iiwa14']],
-        output='screen',
-        condition=IfCondition(use_sim),
-    )
-
-    joint_state_broadcaster_spawner = Node(
-        package='controller_manager',
-        executable='spawner',
-        arguments=['joint_state_broadcaster', '--controller-manager',
-                   [namespace, 'controller_manager']],
-    )
-
-    external_torque_broadcaster_spawner = Node(
-        package='controller_manager',
-        executable='spawner',
-        arguments=['ets_state_broadcaster', '--controller-manager',
-                   [namespace, 'controller_manager']],
-        condition=UnlessCondition(use_sim),
-    )
-
-    robot_controller_spawner = Node(
-        package='controller_manager',
-        executable='spawner',
-        arguments=[robot_controller, '--controller-manager', [namespace, 'controller_manager']],
-    )
-
-    # Delay `joint_state_broadcaster` after spawn_entity
-    delay_joint_state_broadcaster_spawner_after_spawn_entity = RegisterEventHandler(
-        event_handler=OnProcessExit(
-            target_action=spawn_entity,
-            on_exit=[joint_state_broadcaster_spawner],
-        ),
-        condition=IfCondition(use_sim),
-    )
-
-    # Delay `joint_state_broadcaster` after control_node
-    delay_joint_state_broadcaster_spawner_after_control_node = RegisterEventHandler(
-        event_handler=OnProcessStart(
-            target_action=control_node,
-            on_start=[joint_state_broadcaster_spawner],
-        ),
-        condition=UnlessCondition(use_sim),
-    )
-
-    # Delay rviz start after `joint_state_broadcaster`
-    delay_rviz_after_joint_state_broadcaster_spawner = RegisterEventHandler(
-        event_handler=OnProcessExit(
-            target_action=joint_state_broadcaster_spawner,
-            on_exit=[rviz_node],
-        ),
-        condition=IfCondition(start_rviz),
-    )
-
-    # Delay start of robot_controller after `joint_state_broadcaster`
-    delay_robot_controller_spawner_after_joint_state_broadcaster_spawner = RegisterEventHandler(
-        event_handler=OnProcessExit(
-            target_action=joint_state_broadcaster_spawner,
-            on_exit=[robot_controller_spawner],
-        )
-    )
-
-    nodes = [
-        gazebo,
-        control_node,
-        iiwa_planning_launch,
-        iiwa_servoing_launch,
-        spawn_entity,
-        robot_state_pub_node,
-        delay_joint_state_broadcaster_spawner_after_control_node,
-        delay_joint_state_broadcaster_spawner_after_spawn_entity,
-        delay_rviz_after_joint_state_broadcaster_spawner,
-        external_torque_broadcaster_spawner,
-        delay_robot_controller_spawner_after_joint_state_broadcaster_spawner,
-    ]
+    nodes = [rviz_node]
 
     return LaunchDescription(declared_arguments + nodes)

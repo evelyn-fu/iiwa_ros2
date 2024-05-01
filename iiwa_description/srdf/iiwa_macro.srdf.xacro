@@ -15,7 +15,7 @@
         <joint name="${prefix}joint_a6" value="1.571"/>
         <joint name="${prefix}joint_a7" value="0.785"/>
     </group_state>
-    <virtual_joint child_link="${prefix}iiwa_base" name="virtual_joint" parent_frame="world" type="floating"/>
+    <virtual_joint name="virtual_joint" type="fixed" parent_frame="base_link" child_link="world" />
 
     <disable_collisions link1="${prefix}iiwa_base" link2="${prefix}link_0" reason="Adjacent" />
     <disable_collisions link1="${prefix}iiwa_base" link2="${prefix}link_1" reason="Never" />
